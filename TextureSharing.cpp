@@ -26,7 +26,7 @@ handle CreateD3D12Texture(com_ptr<ID3D12Device> d3d12Device, DXGI_FORMAT format,
 }
 
 HANDLE CreateD3D11Texture(com_ptr<ID3D11Device5> d3d11Device, DXGI_FORMAT format, UINT bind, UINT miscFlags) {
-	assert(miscFlags & D3D11_RESOURCE_MISC_SHARED); // Testing sharing
+	assert((miscFlags & D3D11_RESOURCE_MISC_SHARED) || (miscFlags & D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX)); // Testing sharing
 
 	const CD3D11_TEXTURE2D_DESC desc11{ format,
 									 TextureWidth,
@@ -222,10 +222,14 @@ MAKE_VAL(DXGI_FORMAT_V408)
 		MAKE_VAL(D3D11_BIND_RENDER_TARGET),
 		MAKE_VAL(D3D11_BIND_SHADER_RESOURCE)
 	};
+
 	const StrValue<D3D11_RESOURCE_MISC_FLAG> miscFlags11[] = {
 		MAKE_VAL(D3D11_RESOURCE_MISC_SHARED),
-		MAKE_VAL2(D3D11_RESOURCE_MISC_FLAG, D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE)
+		MAKE_VAL2(D3D11_RESOURCE_MISC_FLAG, D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE),
+		MAKE_VAL2(D3D11_RESOURCE_MISC_FLAG, D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX),
+		MAKE_VAL2(D3D11_RESOURCE_MISC_FLAG, D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX),
 	};
+
 	const StrValue<D3D12_RESOURCE_FLAGS> resourceFlags12[] = {
 		MAKE_VAL(D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL),
 		MAKE_VAL(D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL | D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE),
@@ -270,7 +274,7 @@ MAKE_VAL(DXGI_FORMAT_V408)
 					}
 				}
 
-				printf("    Bind=%-26s Misc=%-65s = %s\n", bindFlag.Str, miscFlag.Str, result);
+				printf("    Bind=%-26s Misc=%-80s = %s\n", bindFlag.Str, miscFlag.Str, result);
 			}
 		}
 		if (!textureCreated) {
@@ -309,7 +313,7 @@ MAKE_VAL(DXGI_FORMAT_V408)
 					}
 				}
 
-				printf("    Bind=%-26s Misc=%-65s = %s\n", bindFlag.Str, miscFlag.Str, result);
+				printf("    Bind=%-26s Misc=%-80s = %s\n", bindFlag.Str, miscFlag.Str, result);
 			}
 		}
 		if (!textureCreated) {
@@ -341,7 +345,7 @@ MAKE_VAL(DXGI_FORMAT_V408)
 				catch (...) {
 					result = "Failed";
 				}
-				printf("    ResourceFlag=%-89s = %s\n", resourceFlag.Str, result);
+				printf("    ResourceFlag=%-104s = %s\n", resourceFlag.Str, result);
 			}
 		}
 		if (!textureCreated) {
@@ -373,7 +377,7 @@ MAKE_VAL(DXGI_FORMAT_V408)
 				catch (...) {
 					result = "Failed";
 				}
-				printf("    ResourceFlag=%-89s = %s\n", resourceFlag.Str, result);
+				printf("    ResourceFlag=%-104s = %s\n", resourceFlag.Str, result);
 			}
 		}
 		if (!textureCreated) {
