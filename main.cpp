@@ -1,11 +1,14 @@
 #include "Header.h"
 
+#define VK_USE_PLATFORM_WIN32_KHR
+
 #include <iostream>
 #include <Unknwn.h>
 #include <winrt/base.h>
 #include <dxgi1_6.h>
 #include <d3d12.h>
 #include <d3d11_4.h>
+#include <vulkan/vulkan.hpp>
 
 using namespace winrt;
 
@@ -21,6 +24,51 @@ com_ptr<IDXGIAdapter3> GetAdapter(com_ptr<IDXGIFactory4> dxgiFactory) {
 	printf("Testing adapter: %ws\n", adapterDesc.Description);
 
 	return adapter3;
+}
+
+vk::PhysicalDevice GetPhysicalDevice(vk::Instance instance, LUID luid, const vk::DispatchLoaderDynamic& dld) {
+
+	std::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
+	auto it = std::find_if(physicalDevices.begin(), physicalDevices.end(), [&](vk::PhysicalDevice pd) {
+		vk::StructureChain< vk::PhysicalDeviceProperties2, vk::PhysicalDeviceIDProperties> chain{};
+
+		pd.getProperties2KHR(&chain.get<vk::PhysicalDeviceProperties2>(), dld);
+
+		const auto& devIdProps = chain.get<vk::PhysicalDeviceIDProperties>();
+
+		if (!devIdProps.deviceLUIDValid) {
+			return false;
+
+		}
+		return memcmp(devIdProps.deviceLUID.data(), &luid, sizeof(luid)) == 0;
+		});
+	if (it == physicalDevices.end()) {
+		throw std::runtime_error("Could not find Vulkan physical device matching DXGI adapter luid");
+	}
+	return *it;
+}
+uint32_t FindQueueFamilyIndex(vk::PhysicalDevice physicalDevice, const vk::DispatchLoaderDynamic& dld)
+{
+	std::vector<vk::QueueFamilyProperties> props = physicalDevice.getQueueFamilyProperties(dld);
+	for (size_t i = 0; i < props.size(); ++i) {
+		if (props[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+			return static_cast<uint32_t>(i);
+		}
+	}
+	return 0;
+
+}
+vk::UniqueDevice MakeLogicalDevice(vk::PhysicalDevice physicalDevice, uint32_t queueFamilyIndex) {
+	auto priorities = { 0.5f };
+	const char* deviceExtensions[] = {VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME};
+	vk::DeviceQueueCreateInfo deviceQueueCreateInfos[] = {vk::DeviceQueueCreateInfo({}, queueFamilyIndex, priorities)};
+	return physicalDevice.createDeviceUnique(vk::DeviceCreateInfo{ {},
+		// queue create infos
+		deviceQueueCreateInfos,
+		// layers
+		{},
+		deviceExtensions
+		});
 }
 
 int main()
@@ -81,6 +129,32 @@ int main()
 		check_hresult(D3D11CreateDevice(adapter.get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT | DebugFlags,
 			featureLevels.data(), static_cast<UINT>(std::size(featureLevels)), D3D11_SDK_VERSION, d3d11Device2a.put(), nullptr, nullptr));
 		com_ptr<ID3D11Device5> d3d11Device1 = d3d11Device1a.as<ID3D11Device5>(), d3d11Device2 = d3d11Device2a.as<ID3D11Device5>();
+
+		//
+		// Set up Vulkan
+		//
+		DXGI_ADAPTER_DESC desc;
+		check_hresult(adapter->GetDesc(&desc));
+	
+		vk::UniqueInstance instance;
+		{
+			vk::ApplicationInfo appInfo;
+			appInfo.pApplicationName = "D3DSharingTests";
+			appInfo.pEngineName = "D3DSharingTests";
+			appInfo.apiVersion = VK_API_VERSION_1_2;
+			std::vector<const char *> instanceExtensions = { VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME };
+			instance = vk::createInstanceUnique(vk::InstanceCreateInfo(vk::InstanceCreateFlags{}, &appInfo, 0, nullptr, (uint32_t)instanceExtensions.size(), instanceExtensions.data()));
+		}
+		
+		vk::DispatchLoaderDynamic dld(vkGetInstanceProcAddr);
+		dld.init(*instance);
+		vk::PhysicalDevice vPhysicalDevice = GetPhysicalDevice(*instance, desc.AdapterLuid, dld);
+		uint32_t vulkanQueueFamilyIndex = FindQueueFamilyIndex(vPhysicalDevice, dld);
+		vk::UniqueDevice vulkanDevice = MakeLogicalDevice(vPhysicalDevice, vulkanQueueFamilyIndex);
+
+		dld.init(vulkanDevice.get());
+
+		auto vulkanCommandPool = vulkanDevice->createCommandPoolUnique(vk::CommandPoolCreateInfo{ vk::CommandPoolCreateFlagBits::eResetCommandBuffer, vulkanQueueFamilyIndex }, nullptr, dld);
 
 		//
 		// Run the test(s)
