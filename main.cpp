@@ -1,3 +1,5 @@
+#include "Header.h"
+
 #include <iostream>
 #include <Unknwn.h>
 #include <winrt/base.h>
@@ -6,14 +8,6 @@
 #include <d3d11_4.h>
 
 using namespace winrt;
-
-// TextureSharing.cpp
-void TexturePermationSharingTests(com_ptr<ID3D11Device5> d3d11Device, com_ptr<ID3D11Device5> d3d11DeviceSecond, com_ptr<ID3D12Device> d3d12Device, com_ptr<ID3D12Device> d3d12DeviceSecond);
-
-// FenceSharing.cpp
-void Fence11To12Test(com_ptr<ID3D11Device5> d3d11Device, com_ptr<ID3D12Device> d3d12Device);
-void Fence12To11Test(com_ptr<ID3D11Device5> d3d11Device, com_ptr<ID3D12Device> d3d12Device);
-void Fence12To12Test(com_ptr<ID3D12Device> d3d12Device1, com_ptr<ID3D12Device> d3d12Device2);
 
 com_ptr<IDXGIAdapter3> GetAdapter(com_ptr<IDXGIFactory4> dxgiFactory) {
 	com_ptr<IDXGIAdapter1> dxgiAdapter;
