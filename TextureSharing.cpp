@@ -87,7 +87,7 @@ struct StrValue
 #define MAKE_VAL(x) StrValue(x, #x)
 #define MAKE_VAL2(t, x) StrValue<t>((t)(x), #x)
 
-void TexturePermationSharingTests(com_ptr<ID3D11Device5> d3d11Device, com_ptr<ID3D11Device5> d3d11DeviceSecond, com_ptr<ID3D12Device> d3d12Device, com_ptr<ID3D12Device> d3d12DeviceSecond) {
+void TexturePermationSharingTests(com_ptr<ID3D11Device5> d3d11Device, com_ptr<ID3D11Device5> d3d11DeviceSecond, com_ptr<ID3D12Device> d3d12Device, com_ptr<ID3D12Device> d3d12DeviceSecond, bool skipFailedAllocations) {
 	const StrValue<DXGI_FORMAT> formats[] = {
 MAKE_VAL(DXGI_FORMAT_R24G8_TYPELESS),
 MAKE_VAL(DXGI_FORMAT_D24_UNORM_S8_UINT),
@@ -264,7 +264,7 @@ MAKE_VAL(DXGI_FORMAT_V408)
 				}
 				catch (...) {
 					result = "D3D11 Texture not created";
-					continue; // No point in displaying data for invalid texture configuration.
+					if (skipFailedAllocations) continue; // No point in displaying data for invalid texture configuration.
 				}
 
 				if (texture11) {
@@ -302,7 +302,7 @@ MAKE_VAL(DXGI_FORMAT_V408)
 				}
 				catch (...) {
 					result = "D3D11 Texture not created";
-					continue; // No point in displaying data for invalid texture configuration.
+					if (skipFailedAllocations) continue; // No point in displaying data for invalid texture configuration.
 				}
 
 				if (texture11) {
@@ -336,7 +336,7 @@ MAKE_VAL(DXGI_FORMAT_V408)
 			}
 			catch (...) {
 				result = "D3D12 Texture not created";
-				continue; // No point in displaying data for invalid texture configuration.
+				if (skipFailedAllocations) continue; // No point in displaying data for invalid texture configuration.
 			}
 
 			if (texture12) {
@@ -368,7 +368,7 @@ MAKE_VAL(DXGI_FORMAT_V408)
 			}
 			catch (...) {
 				result = "D3D12 Texture not created";
-				continue; // No point in displaying data for invalid texture configuration.
+				if (skipFailedAllocations) continue; // No point in displaying data for invalid texture configuration.
 			}
 
 			if (texture12) {

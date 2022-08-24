@@ -4,7 +4,7 @@
 #include <winrt/base.h>
 
 // TextureSharing.cpp
-void TexturePermationSharingTests(winrt::com_ptr<ID3D11Device5> d3d11Device, winrt::com_ptr<ID3D11Device5> d3d11DeviceSecond, winrt::com_ptr<ID3D12Device> d3d12Device, winrt::com_ptr<ID3D12Device> d3d12DeviceSecond);
+void TexturePermationSharingTests(winrt::com_ptr<ID3D11Device5> d3d11Device, winrt::com_ptr<ID3D11Device5> d3d11DeviceSecond, winrt::com_ptr<ID3D12Device> d3d12Device, winrt::com_ptr<ID3D12Device> d3d12DeviceSecond, bool skipFailedAllocations = true);
 
 // FenceSharing.cpp
 void Fence11To12Test(winrt::com_ptr<ID3D11Device5> d3d11Device, winrt::com_ptr<ID3D12Device> d3d12Device);
