@@ -7,6 +7,8 @@
 #include <d3d12.h>
 #include <d3d11_4.h>
 
+#include "d3d_dxgi_formats.h"
+
 using namespace winrt;
 
 constexpr UINT64 TextureWidth = 32;
@@ -75,6 +77,88 @@ com_ptr<ID3D11Texture2D> OpenSharedTextureForD3D11(com_ptr<ID3D11Device5> d3d11D
 	return texture11;
 }
 
+vk::UniqueHandle<vk::Image, vk::DispatchLoaderDynamic> OpenSharedTextureForVulkan(VulkanStuff const& vkStuff, HANDLE textureHandle, VkFormat format, bool isNtHandle)
+{
+	vk::ImageUsageFlags image_usage = {};
+
+	vk::ExternalMemoryHandleTypeFlagBits handle_type = isNtHandle ? vk::ExternalMemoryHandleTypeFlagBits::eOpaqueWin32 : vk::ExternalMemoryHandleTypeFlagBits::eD3D11Texture;
+
+	vk::ExternalMemoryImageCreateInfo ext_mem_img_create_info(handle_type);
+	auto queueFamilyIndices = { vkStuff.queueFamilyIndex };
+	auto vk_info = vk::ImageCreateInfo(
+		vk::ImageCreateFlags{},
+		vk::ImageType::e2D,
+		format,
+		vk::Extent3D(TextureWidth, TextureHeight, 1),
+		MipLevels,
+		ArraySize,
+		vk::SampleCountFlagBits::e1,
+		vk::ImageTiling::eOptimal, // TODO ?
+		image_usage,
+		vk::SharingMode::eExclusive, // TODO ?
+		queueFamilyIndices,
+		vk::ImageLayout::eUndefined, &ext_mem_img_create_info
+
+	);
+
+	vk::UniqueHandle<vk::Image, vk::DispatchLoaderDynamic> image;
+	try {
+		 image = vkStuff.device->createImageUnique(vk_info, nullptr, vkStuff.dld);
+
+	}
+	catch  (...) {
+		return {};
+	}
+	auto importMemInfo = vk::ImportMemoryWin32HandleInfoKHR{ handle_type, textureHandle	};
+	auto dedicatedMemInfo = vk::MemoryDedicatedAllocateInfo{ image.get(), nullptr, &importMemInfo };
+	auto memReq = vkStuff.device->getImageMemoryRequirements(image.get(), vkStuff.dld);
+
+	VkMemoryRequirements memory_requirements;
+	vk->vkGetImageMemoryRequirements(vk->device, image, &memory_requirements);
+
+	if (max_size > 0 && memory_requirements.size > max_size) {
+		VK_ERROR(vk, "(%s) vkGetImageMemoryRequirements: Requested more memory (%u) then given (%u)\n",
+			caller_name, (uint32_t)memory_requirements.size, (uint32_t)max_size);
+		return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+	}
+	if (out_size != NULL) {
+		*out_size = memory_requirements.size;
+	}
+
+	uint32_t memory_type_index = UINT32_MAX;
+	bool bret = vk_get_memory_type(          //
+		vk,                                  // vk_bundle
+		memory_requirements.memoryTypeBits,  // type_bits
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, // memory_props
+		&memory_type_index);                 // out_type_id
+	if (!bret) {
+		VK_ERROR(vk, "(%s) vk_get_memory_type: false\n\tFailed to find a matching memory type.", caller_name);
+		return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+	}
+
+	VkMemoryAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.pNext = pNext_for_allocate,
+		.allocationSize = memory_requirements.size,
+		.memoryTypeIndex = memory_type_index,
+	};
+
+	VkDeviceMemory device_memory = VK_NULL_HANDLE;
+	VkResult ret = vk->vkAllocateMemory(vk->device, &alloc_info, NULL, &device_memory);
+	if (ret != VK_SUCCESS) {
+		VK_ERROR(vk, "(%s) vkAllocateMemory: %s", caller_name, vk_result_string(ret));
+		return ret;
+	}
+
+	// Bind the memory to the image.
+	ret = vk->vkBindImageMemory(vk->device, image, device_memory, 0);
+	if (ret != VK_SUCCESS) {
+		// Clean up memory
+		vk->vkFreeMemory(vk->device, device_memory, NULL);
+		VK_ERROR(vk, "(%s) vkBindImageMemory: %s", caller_name, vk_result_string(ret));
+		return ret;
+	}
+}
 template <typename TInt>
 struct StrValue
 {
@@ -87,7 +171,8 @@ struct StrValue
 #define MAKE_VAL(x) StrValue(x, #x)
 #define MAKE_VAL2(t, x) StrValue<t>((t)(x), #x)
 
-void TexturePermationSharingTests(com_ptr<ID3D11Device5> d3d11Device, com_ptr<ID3D11Device5> d3d11DeviceSecond, com_ptr<ID3D12Device> d3d12Device, com_ptr<ID3D12Device> d3d12DeviceSecond, bool skipFailedAllocations) {
+void TexturePermationSharingTests(com_ptr<ID3D11Device5> d3d11Device, com_ptr<ID3D11Device5> d3d11DeviceSecond, com_ptr<ID3D12Device> d3d12Device, com_ptr<ID3D12Device> d3d12DeviceSecond,
+	vk::Device vulkanDevice, const vk::DispatchLoaderDynamic& dld, bool skipFailedAllocations) {
 	const StrValue<DXGI_FORMAT> formats[] = {
 MAKE_VAL(DXGI_FORMAT_R24G8_TYPELESS),
 MAKE_VAL(DXGI_FORMAT_D24_UNORM_S8_UINT),
@@ -241,6 +326,8 @@ MAKE_VAL(DXGI_FORMAT_V408)
 
 	for (auto format : formats) {
 		printf("Format %s\n", format.Str);
+
+		VkFormat vkformat = (VkFormat)d3d_dxgi_format_to_vk(format.Value);
 
 		// 11 to 11
 		printf("  D3D11 shared to D3D11:\n");

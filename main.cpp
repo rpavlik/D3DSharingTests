@@ -1,7 +1,5 @@
 #include "Header.h"
 
-#define VK_USE_PLATFORM_WIN32_KHR
-
 #include <iostream>
 #include <Unknwn.h>
 #include <winrt/base.h>
@@ -70,6 +68,29 @@ vk::UniqueDevice MakeLogicalDevice(vk::PhysicalDevice physicalDevice, uint32_t q
 		deviceExtensions
 		});
 }
+VulkanStuff::VulkanStuff(DXGI_ADAPTER_DESC desc) :
+	dld(vkGetInstanceProcAddr)
+{
+	// Make instance
+	{
+		vk::ApplicationInfo appInfo;
+		appInfo.pApplicationName = "D3DSharingTests";
+		appInfo.pEngineName = "D3DSharingTests";
+		appInfo.apiVersion = VK_API_VERSION_1_2;
+		std::vector<const char*> instanceExtensions = { VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME };
+		instance = vk::createInstanceUnique(vk::InstanceCreateInfo(vk::InstanceCreateFlags{}, &appInfo, 0, nullptr, (uint32_t)instanceExtensions.size(), instanceExtensions.data()));
+	}
+
+	dld.init(*instance);
+	vk::PhysicalDevice vPhysicalDevice = GetPhysicalDevice(*instance, desc.AdapterLuid, dld);
+	queueFamilyIndex = FindQueueFamilyIndex(vPhysicalDevice, dld);
+	device = MakeLogicalDevice(vPhysicalDevice, queueFamilyIndex);
+
+	dld.init(device.get());
+
+	commandPool = std::move(device->createCommandPoolUnique(vk::CommandPoolCreateInfo{ vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex }, nullptr, dld));
+
+}
 
 int main()
 {
@@ -136,30 +157,12 @@ int main()
 		DXGI_ADAPTER_DESC desc;
 		check_hresult(adapter->GetDesc(&desc));
 	
-		vk::UniqueInstance instance;
-		{
-			vk::ApplicationInfo appInfo;
-			appInfo.pApplicationName = "D3DSharingTests";
-			appInfo.pEngineName = "D3DSharingTests";
-			appInfo.apiVersion = VK_API_VERSION_1_2;
-			std::vector<const char *> instanceExtensions = { VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME };
-			instance = vk::createInstanceUnique(vk::InstanceCreateInfo(vk::InstanceCreateFlags{}, &appInfo, 0, nullptr, (uint32_t)instanceExtensions.size(), instanceExtensions.data()));
-		}
-		
-		vk::DispatchLoaderDynamic dld(vkGetInstanceProcAddr);
-		dld.init(*instance);
-		vk::PhysicalDevice vPhysicalDevice = GetPhysicalDevice(*instance, desc.AdapterLuid, dld);
-		uint32_t vulkanQueueFamilyIndex = FindQueueFamilyIndex(vPhysicalDevice, dld);
-		vk::UniqueDevice vulkanDevice = MakeLogicalDevice(vPhysicalDevice, vulkanQueueFamilyIndex);
-
-		dld.init(vulkanDevice.get());
-
-		auto vulkanCommandPool = vulkanDevice->createCommandPoolUnique(vk::CommandPoolCreateInfo{ vk::CommandPoolCreateFlagBits::eResetCommandBuffer, vulkanQueueFamilyIndex }, nullptr, dld);
+		auto vkStuff = VulkanStuff(desc);
 
 		//
 		// Run the test(s)
 		//
-		TexturePermationSharingTests(d3d11Device1, d3d11Device2, d3d12Device1, d3d12Device2);
+		TexturePermationSharingTests(d3d11Device1, d3d11Device2, d3d12Device1, d3d12Device2, vkStuff);
 
 		Fence11To12Test(d3d11Device1, d3d12Device1);
 		Fence12To11Test(d3d11Device1, d3d12Device1);
